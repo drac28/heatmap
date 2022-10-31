@@ -3,12 +3,9 @@ import cv2
 import copy
 from tqdm import tqdm
 import os
-import json
 import standard
 
-def count_frames(path, cache):
-    if "frames" in cache:
-        return cache["frames"]
+def count_frames(path):
     (major, minor, _) = cv2.__version__.split(".")
     video = cv2.VideoCapture(path)
     total = 0
@@ -29,26 +26,20 @@ def count_frames(path, cache):
             except KeyboardInterrupt:
                 break
     print(total, "frames in total")
-    cache["frames"] = total
-    json.dump(cache, open(".cache", "w"))
     return total
 
-def main():
-    print("OpenCV Version:", cv2.__version__)
-    if os.path.isfile(".cache"):
-        cache = json.load(open(".cache"))
-    else:
-        cache = {"file": ""}
-    path = input("Path to Videofile: ")
-    if path != cache["file"]:
-        cache = {}
-    cache["file"] = path
+def main(path, outpath, divider, level, frames=0):
     cap = cv2.VideoCapture(path)
     fgbg = cv2.bgsegm.createBackgroundSubtractorMOG()
 
-    all_frames = count_frames(path, cache)
-    divider = standard.input_int("All Frames divided by: ")
-    frames = int(all_frames / divider)
+    if frames == 0:
+        all_frames = count_frames(path)
+        frames = int(all_frames / divider)
+    else:
+        all_frames = frames
+        frames = int(frames / divider)
+
+    print(frames, "frames to process")
 
     first_iteration_indicator = 1
     for i in tqdm(range(0, frames)):
@@ -77,7 +68,7 @@ def main():
             # apply a binary threshold only keeping pixels above thresh and setting the result to maxValue.  If you want
             # motion to be picked up more, increase the value of maxValue.  To pick up the least amount of motion over time, set maxValue = 1
             thresh = 2
-            maxValue = 2 * divider
+            maxValue = int(2 * divider / level)
             ret, th1 = cv2.threshold(fgmask, thresh, maxValue, cv2.THRESH_BINARY)
             # for testing purposes, show the threshold image
             # cv2.imwrite('diff-th1.jpg', th1)
@@ -92,12 +83,12 @@ def main():
 
         # for testing purposes, show the current frame
         # cv2.imshow('frame', gray)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
          
         for i in range(1, divider):
-            cap.read()
+            try:
+                cap.read()
+            except:
+                pass
 
     # apply a color map
     # COLORMAP_PINK also works well, COLORMAP_BONE is acceptable if the background is dark
@@ -109,14 +100,32 @@ def main():
     result_overlay = cv2.addWeighted(first_frame, 0.7, color_image, 0.7, 0)
 
     # save the final overlay image
-    cv2.imwrite('diff-overlay.jpg', result_overlay)
+    print(outpath)
+    cv2.imwrite(outpath, result_overlay)
 
     # cleanup
     cap.release()
-    cv2.destroyAllWindows()
+    return all_frames
 
 if __name__=='__main__':
     try:
-        main()
+        print("OpenCV Version:", cv2.__version__)
+        path = input("Path to Videofolder/-file: ")
+        divider = standard.input_int("All Frames divided by: ")
+        frames = {}
+        if os.path.isdir(path):
+            for file in os.listdir(path):
+                if not os.path.isdir(path+"/"+file):
+                    print("preview:", file)
+                    frames[file] = main(path+"/"+file, path+"/output/"+file+"_preview.jpg", divider*4, 1)
+            print(frames)
+            for file in os.listdir(path):
+                if not os.path.isdir(path+"/"+file):
+                    print(file)
+                    main(path+"/"+file, path+"/output/"+file+"_1.jpg", divider, 1, frames[file])
+                    main(path+"/"+file, path+"/output/"+file+"_2.jpg", divider, 1.5, frames[file])
+                    main(path+"/"+file, path+"/output/"+file+"_3.jpg", divider, 2, frames[file])
+        else:
+            main(path)
     except KeyboardInterrupt:
         print("User sent exit signal.\nBye")
