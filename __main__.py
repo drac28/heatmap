@@ -114,7 +114,6 @@ def main(origin, path, num, divider, level, frames=0):
 
     # cleanup
     cap.release()
-    return all_frames
 
 if __name__=='__main__':
     try:
